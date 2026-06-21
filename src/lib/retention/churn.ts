@@ -64,8 +64,11 @@ export function aggregateEngagement(
   return map
 }
 
-export function scoreContact(e: ContactEngagement): ScoredContact {
-  const now = Date.now()
+// `now` is injectable so a single scoring pass uses one fixed timestamp for
+// every contact (determinism), and so the feedback loop can re-score the
+// before-snapshot at the SAME instant as the after-data — isolating real
+// engagement change from mere clock drift in the day-based thresholds.
+export function scoreContact(e: ContactEngagement, now: number = Date.now()): ScoredContact {
   let score = 50
 
   if (e.bounced) score += 35
@@ -98,6 +101,7 @@ export type ScoreAllResult = {
 export function scoreAll(
   rows: CampaignRecipient[],
   labelName?: string,
+  now: number = Date.now(),
 ): ScoreAllResult {
   const target = labelName?.trim().toLowerCase()
   const filtered = target
@@ -105,7 +109,7 @@ export function scoreAll(
     : rows
 
   const engagements = aggregateEngagement(filtered)
-  const all = Array.from(engagements.values()).map(scoreContact)
+  const all = Array.from(engagements.values()).map(e => scoreContact(e, now))
 
   return {
     atRisk: all.filter(c => c.risk !== 'low').sort((a, b) => b.score - a.score),

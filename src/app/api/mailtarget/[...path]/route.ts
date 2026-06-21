@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requireEnv } from '@/lib/env'
 
-const BASE_URL       = process.env.MAILTARGET_BASE_URL!
-const API_KEY        = process.env.MAILTARGET_API_KEY!
-const EMAIL_API_KEY  = process.env.MAILTARGET_EMAIL_API_KEY
+const BASE_URL       = requireEnv('MAILTARGET_BASE_URL')
+const API_KEY        = requireEnv('MAILTARGET_API_KEY')
+const EMAIL_API_KEY  = process.env.MAILTARGET_EMAIL_API_KEY  // optional
 
 type Params = { path: string[] }
 

@@ -15,9 +15,19 @@ export function toVectorLiteral(vector: number[]): string {
   return '[' + vector.join(',') + ']'
 }
 
-export async function searchChunks(query: string, topK = 5): Promise<SearchResult[]> {
+export type SourceType = 'url' | 'pdf'
+
+export async function searchChunks(
+  query: string,
+  topK = 5,
+  sourceType?: SourceType,
+): Promise<SearchResult[]> {
   const vector = await embed(query)
   const vectorLiteral = toVectorLiteral(vector)
+  // Clamp so a caller can't trigger a huge scan with an absurd topK.
+  const limit = Math.min(Math.max(1, Math.trunc(topK) || 5), 50)
+  // null = no type filter; otherwise restrict to URL- or PDF-sourced chunks.
+  const typeFilter = sourceType ?? null
 
   const rows = await sql`
     SELECT
@@ -30,8 +40,9 @@ export async function searchChunks(query: string, topK = 5): Promise<SearchResul
     FROM chunks c
     JOIN sources s ON s.id = c.source_id
     WHERE s.status = 'ready'
+      AND (${typeFilter}::text IS NULL OR s.type = ${typeFilter})
     ORDER BY c.embedding <=> ${vectorLiteral}::vector
-    LIMIT ${topK}
+    LIMIT ${limit}
   `
 
   return rows as SearchResult[]

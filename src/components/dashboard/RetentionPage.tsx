@@ -59,7 +59,7 @@ function InsightPanel({ text }: { text: string }) {
       </div>
       <div className="flex flex-col gap-2">
         {lines.map((line, i) => (
-          <p key={i} className="text-sm leading-relaxed" style={{ color: 'var(--text)' }}>
+          <p key={i} className="text-sm leading-relaxed break-words" style={{ color: 'var(--text)', overflowWrap: 'anywhere' }}>
             {line}
           </p>
         ))}

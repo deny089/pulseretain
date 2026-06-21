@@ -59,6 +59,8 @@ type FormState = {
 
 const EMPTY_FORM: FormState = { subject: '', senderName: '', senderEmail: '', htmlContent: '', labelTargets: [] }
 
+const RECIPIENTS_PER_PAGE = 100
+
 export default function CampaignsPage() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [senders, setSenders]     = useState<Sender[]>([])
@@ -72,7 +74,13 @@ export default function CampaignsPage() {
   const [createErr, setCreateErr] = useState('')
 
   const [analyticsModal, setAnalyticsModal] = useState<{ campaign: Campaign; data: CampaignAnalytics | null } | null>(null)
-  const [recipientsModal, setRecipientsModal] = useState<{ campaign: Campaign; data: CampaignRecipient[] } | null>(null)
+  const [recipientsModal, setRecipientsModal] = useState<{
+    campaign: Campaign
+    data: CampaignRecipient[]
+    page: number
+    hasMore: boolean
+    loading: boolean
+  } | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Campaign | null>(null)
 
   const [testTarget, setTestTarget] = useState<Campaign | null>(null)
@@ -151,9 +159,39 @@ export default function CampaignsPage() {
   }
 
   async function openRecipients(c: Campaign) {
-    setRecipientsModal({ campaign: c, data: [] })
-    const { data } = await getCampaignRecipients(c.id, { perPage: 50 })
-    setRecipientsModal({ campaign: c, data: Array.isArray(data) ? data : [] })
+    setRecipientsModal({ campaign: c, data: [], page: 1, hasMore: false, loading: true })
+    const { data } = await getCampaignRecipients(c.id, { perPage: RECIPIENTS_PER_PAGE, page: 1 })
+    const list = Array.isArray(data) ? data : []
+    setRecipientsModal({
+      campaign: c,
+      data: list,
+      page: 1,
+      hasMore: list.length === RECIPIENTS_PER_PAGE,
+      loading: false,
+    })
+  }
+
+  async function loadMoreRecipients() {
+    const current = recipientsModal
+    if (!current || current.loading) return
+    setRecipientsModal(m => (m ? { ...m, loading: true } : m))
+    const nextPage = current.page + 1
+    const { data } = await getCampaignRecipients(current.campaign.id, {
+      perPage: RECIPIENTS_PER_PAGE,
+      page: nextPage,
+    })
+    const list = Array.isArray(data) ? data : []
+    setRecipientsModal(m =>
+      m
+        ? {
+            ...m,
+            data: [...m.data, ...list],
+            page: nextPage,
+            hasMore: list.length === RECIPIENTS_PER_PAGE,
+            loading: false,
+          }
+        : m,
+    )
   }
 
   const filtered = campaigns.filter(c =>
@@ -340,16 +378,34 @@ export default function CampaignsPage() {
       {/* Recipients Modal */}
       {recipientsModal && (
         <Modal title={`Recipients — ${recipientsModal.campaign.subject}`} onClose={() => setRecipientsModal(null)}>
-          {recipientsModal.data.length === 0 ? (
+          {recipientsModal.loading && recipientsModal.data.length === 0 ? (
+            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Loading…</p>
+          ) : recipientsModal.data.length === 0 ? (
             <p className="text-xs" style={{ color: 'var(--text-muted)' }}>No recipients found.</p>
           ) : (
-            <div className="flex flex-col gap-1 overflow-y-auto" style={{ maxHeight: 300 }}>
-              {recipientsModal.data.map((r, i) => (
-                <div key={i} className="flex items-center justify-between py-2 border-b text-xs" style={{ borderColor: 'var(--border)', color: 'var(--text)' }}>
-                  <span>{r.email}</span>
-                  {r.status && <span className="badge badge-gray">{r.status}</span>}
-                </div>
-              ))}
+            <div className="flex flex-col gap-3">
+              <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                Showing {recipientsModal.data.length} recipient{recipientsModal.data.length === 1 ? '' : 's'}
+                {recipientsModal.hasMore && ' (more available)'}
+              </p>
+              <div className="flex flex-col gap-1 overflow-y-auto" style={{ maxHeight: 300 }}>
+                {recipientsModal.data.map((r, i) => (
+                  <div key={i} className="flex items-center justify-between py-2 border-b text-xs" style={{ borderColor: 'var(--border)', color: 'var(--text)' }}>
+                    <span>{r.email}</span>
+                    {r.status && <span className="badge badge-gray">{r.status}</span>}
+                  </div>
+                ))}
+              </div>
+              {recipientsModal.hasMore && (
+                <button
+                  onClick={loadMoreRecipients}
+                  disabled={recipientsModal.loading}
+                  className="self-center px-4 py-2 rounded-lg text-xs font-medium disabled:opacity-40"
+                  style={{ background: 'var(--border)', color: 'var(--text)' }}
+                >
+                  {recipientsModal.loading ? 'Loading…' : 'Load more'}
+                </button>
+              )}
             </div>
           )}
         </Modal>

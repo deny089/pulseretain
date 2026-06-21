@@ -1,12 +1,19 @@
 import type { ApiResponse } from './types'
+import { requireEnv } from '@/lib/env'
 
-const BASE_URL = process.env.MAILTARGET_BASE_URL!
-const API_KEY  = process.env.MAILTARGET_API_KEY!
+const BASE_URL = requireEnv('MAILTARGET_BASE_URL')
+const API_KEY  = requireEnv('MAILTARGET_API_KEY')
+
+// Per-request timeout. The analyze/feedback pipelines fan out dozens of
+// recipient fetches; without this, one slow Mailtarget response could hang the
+// whole serverless invocation until the platform's hard timeout.
+const DEFAULT_TIMEOUT_MS = 15_000
 
 export async function mtFetch<T>(
   method: string,
   path: string,
   body?: unknown,
+  timeoutMs: number = DEFAULT_TIMEOUT_MS,
 ): Promise<ApiResponse<T>> {
   const headers: Record<string, string> = {
     Authorization: `Bearer ${API_KEY}`,
@@ -19,6 +26,7 @@ export async function mtFetch<T>(
       headers,
       body: body !== undefined ? JSON.stringify(body) : undefined,
       cache: 'no-store',
+      signal: AbortSignal.timeout(timeoutMs),
     })
     const json = await res.json().catch(() => ({}))
     if (!res.ok) {
@@ -34,7 +42,9 @@ export async function mtFetch<T>(
       error: null,
     }
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Unknown error'
+    const msg = err instanceof Error
+      ? (err.name === 'TimeoutError' ? `Request to ${path} timed out after ${timeoutMs / 1000}s` : err.message)
+      : 'Unknown error'
     return { data: null, meta: null, error: msg }
   }
 }

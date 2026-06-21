@@ -1,7 +1,8 @@
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import type { ScoredContact } from './churn'
+import { requireEnv } from '@/lib/env'
 
-const genai = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
+const genai = new GoogleGenerativeAI(requireEnv('GEMINI_API_KEY'))
 const model = genai.getGenerativeModel({ model: 'gemini-2.5-flash' })
 
 export type ComposedEmail = {

@@ -6,6 +6,10 @@ import { generateRetentionInsight } from '@/lib/retention/generate'
 import { saveAnalysisRun } from '@/lib/retention/runs'
 import type { CampaignRecipient } from '@/lib/mailtarget/types'
 
+// This route fans out many Mailtarget fetches plus RAG + Gemini calls.
+// Raise the serverless ceiling above the 10s/15s Hobby default.
+export const maxDuration = 60
+
 const PAGE_SIZE = 200
 const MAX_PAGES = 10  // cap at 2000 recipients per campaign to avoid runaway fetch
 

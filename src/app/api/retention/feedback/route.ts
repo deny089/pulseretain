@@ -5,6 +5,9 @@ import { getAnalysisRun } from '@/lib/retention/runs'
 import type { CampaignRecipient } from '@/lib/mailtarget/types'
 import type { ScoredContact } from '@/lib/retention/churn'
 
+// Re-fetches and re-scores all recipients — same fan-out as analyze.
+export const maxDuration = 60
+
 const PAGE_SIZE = 200
 const MAX_PAGES = 10
 
@@ -62,6 +65,12 @@ export async function POST(req: NextRequest) {
       r => r.status === 'fulfilled' && r.value.length >= PAGE_SIZE * MAX_PAGES
     )
 
+    // Pin a single timestamp. Both the before-snapshot and the after-data are
+    // scored at this same instant so the delta reflects engagement change, not
+    // drift in the day-based thresholds (e.g. days-since-activity creeping up
+    // just because real time passed between analysis and this check).
+    const now = Date.now()
+
     // 3. Build a FULL scored map for the label (including contacts that improved to low risk).
     //    scoreAll() filters out low-risk, so we aggregate + score manually here.
     //    Normalize label case the same way scoreAll does — labelName comes from the DB
@@ -73,20 +82,25 @@ export async function POST(req: NextRequest) {
     const engagements = aggregateEngagement(labelRecipients)
     const fullAfterMap = new Map<string, ScoredContact>()
     for (const e of engagements.values()) {
-      const scored = scoreContact(e)
+      const scored = scoreContact(e, now)
       fullAfterMap.set(scored.email.toLowerCase(), scored)
     }
 
     const totalScoredAfter = fullAfterMap.size
     const atRiskAfterCount = Array.from(fullAfterMap.values()).filter(c => c.risk !== 'low').length
 
-    // 4. Compute deltas vs before-snapshot
+    // 4. Compute deltas vs before-snapshot (re-scored at `now` for fairness)
     const deltas: DeltaContact[] = []
     let reEngaged = 0
 
-    for (const before of atRiskSnapshot) {
-      const after = fullAfterMap.get(before.email.toLowerCase())
+    for (const snapshot of atRiskSnapshot) {
+      const after = fullAfterMap.get(snapshot.email.toLowerCase())
       if (!after) continue  // contact absent from current data — skip
+
+      // Re-score the snapshot's own engagement at `now` so both sides use the
+      // same clock. ScoredContact extends ContactEngagement, so the raw signals
+      // (lastActivityTs, openRate, bounced…) are all present in the snapshot.
+      const before = scoreContact(snapshot, now)
 
       const delta = after.score - before.score
       const wasAtRisk = before.risk !== 'low'
@@ -94,8 +108,8 @@ export async function POST(req: NextRequest) {
       if (isReEngaged) reEngaged++
 
       deltas.push({
-        email:       before.email,
-        name:        before.name,
+        email:       snapshot.email,
+        name:        snapshot.name,
         scoreBefore: before.score,
         scoreAfter:  after.score,
         riskBefore:  before.risk,

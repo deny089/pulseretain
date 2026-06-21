@@ -1,5 +1,5 @@
 import { sql } from '@/lib/db'
-import { embedBatch } from '@/lib/embedding'
+import { embedBatch, EMBEDDING_DIM } from '@/lib/embedding'
 import { chunkText } from './chunk'
 import { toVectorLiteral } from './search'
 
@@ -10,6 +10,18 @@ export async function ingestText(sourceId: string, text: string): Promise<number
   try {
     // Embed all chunks in parallel (batch), then insert concurrently
     const vectors = await embedBatch(chunks)
+
+    // Validate every embedding up-front. The DB ::vector cast would reject a
+    // wrong-dimension vector mid-loop, leaving the source half-ingested — so
+    // fail before any INSERT runs.
+    vectors.forEach((v, i) => {
+      if (!Array.isArray(v) || v.length !== EMBEDDING_DIM) {
+        throw new Error(`Embedding ${i} has wrong dimension (${v?.length} ≠ ${EMBEDDING_DIM})`)
+      }
+      if (!v.every(n => Number.isFinite(n))) {
+        throw new Error(`Embedding ${i} contains non-finite values`)
+      }
+    })
 
     await Promise.all(
       chunks.map((chunk, i) => {
