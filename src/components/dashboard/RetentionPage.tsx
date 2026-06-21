@@ -76,6 +76,28 @@ type ComposeResult = {
   contactsSkipped: number
 }
 
+type DeltaContact = {
+  email: string
+  name?: string
+  scoreBefore: number
+  scoreAfter: number
+  riskBefore: 'high' | 'medium' | 'low'
+  riskAfter: 'high' | 'medium' | 'low'
+  delta: number
+  reEngaged: boolean
+}
+
+type FeedbackResult = {
+  labelName: string
+  campaignId: string | null
+  runCreatedAt: string
+  before: { totalScored: number; atRiskCount: number }
+  after:  { totalScored: number; atRiskCount: number }
+  reEngaged: number
+  totalTracked: number
+  deltas: DeltaContact[]
+}
+
 export default function RetentionPage() {
   const [labels, setLabels]               = useState<Label[]>([])
   const [labelName, setLabelName]         = useState('')
@@ -93,6 +115,12 @@ export default function RetentionPage() {
   const [composing, setComposing]         = useState(false)
   const [composeErr, setComposeErr]       = useState('')
   const [composeResult, setComposeResult] = useState<ComposeResult | null>(null)
+
+  // Feedback loop state (M5)
+  const [runId, setRunId]                 = useState<string | null>(null)
+  const [feedback, setFeedback]           = useState<FeedbackResult | null>(null)
+  const [feedbackLoading, setFeedbackLoading] = useState(false)
+  const [feedbackErr, setFeedbackErr]     = useState('')
 
   useEffect(() => {
     listLabels({ perPage: 100 })
@@ -133,6 +161,7 @@ export default function RetentionPage() {
           senderName: sender.name,
           senderEmail: sender.email,
           subjectOverride: composeSubject.trim() || undefined,
+          runId: runId ?? undefined,
         }),
       })
       const json = await res.json()
@@ -150,6 +179,7 @@ export default function RetentionPage() {
   async function handleAnalyze() {
     if (!labelName) return
     setLoading(true); setError(''); setResult(null)
+    setRunId(null); setFeedback(null); setFeedbackErr('')
 
     try {
       const res = await fetch('/api/retention/analyze', {
@@ -162,11 +192,30 @@ export default function RetentionPage() {
         setError(json.error)
       } else {
         setResult(json.data)
+        setRunId(json.data.runId ?? null)
       }
     } catch {
       setError('Network error. Please try again.')
     }
     setLoading(false)
+  }
+
+  async function handleFeedback() {
+    if (!runId) return
+    setFeedbackLoading(true); setFeedbackErr('')
+    try {
+      const res = await fetch('/api/retention/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ runId }),
+      })
+      const json = await res.json()
+      if (json.error) setFeedbackErr(json.error)
+      else setFeedback(json.data)
+    } catch {
+      setFeedbackErr('Network error. Please try again.')
+    }
+    setFeedbackLoading(false)
   }
 
   const highCount  = result?.atRisk.filter(c => c.risk === 'high').length ?? 0
@@ -431,7 +480,7 @@ export default function RetentionPage() {
                       )}
                     </p>
                   </div>
-                  <div className="flex gap-2 mt-1">
+                  <div className="flex flex-wrap gap-2 mt-1">
                     <a
                       href="/dashboard/campaigns"
                       className="px-4 py-2 rounded-lg text-xs font-medium"
@@ -439,14 +488,27 @@ export default function RetentionPage() {
                     >
                       View in Campaigns →
                     </a>
+                    {runId && (
+                      <button
+                        onClick={handleFeedback}
+                        disabled={feedbackLoading}
+                        className="px-4 py-2 rounded-lg text-xs font-medium disabled:opacity-40"
+                        style={{ background: 'var(--border)', color: 'var(--text)', border: '1px solid var(--border)' }}
+                      >
+                        {feedbackLoading ? 'Checking…' : 'Check Re-engagement'}
+                      </button>
+                    )}
                     <button
                       onClick={() => setComposeResult(null)}
                       className="px-4 py-2 rounded-lg text-xs"
-                      style={{ background: 'var(--border)', color: 'var(--text)' }}
+                      style={{ background: 'transparent', color: 'var(--text-muted)' }}
                     >
                       Compose Another
                     </button>
                   </div>
+                  {feedbackErr && (
+                    <p className="text-xs" style={{ color: 'var(--accent-neg)' }}>{feedbackErr}</p>
+                  )}
                 </div>
               ) : (
                 <div
@@ -565,6 +627,153 @@ export default function RetentionPage() {
                 </div>
               )}
             </>
+          )}
+
+          {/* M5: Feedback panel */}
+          {feedback && (
+            <div className="flex flex-col gap-4">
+              {/* Hero metric */}
+              <div
+                className="rounded-xl border p-5 flex flex-col gap-4"
+                style={{ borderColor: 'var(--border)', background: 'var(--bg-card)' }}
+              >
+                <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>
+                  Re-engagement Check
+                </p>
+                <div className="flex flex-wrap gap-4">
+                  <div className="flex flex-col">
+                    <span
+                      className="text-4xl font-bold tabular-nums"
+                      style={{ color: feedback.reEngaged > 0 ? 'var(--accent-pos)' : 'var(--text-muted)' }}
+                    >
+                      {feedback.reEngaged}
+                    </span>
+                    <span className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+                      dari {feedback.totalTracked} contacts re-engaged
+                    </span>
+                  </div>
+                  <div className="h-12 w-px" style={{ background: 'var(--border)' }} />
+                  <div className="flex flex-col gap-1 text-xs" style={{ color: 'var(--text-muted)' }}>
+                    <p>
+                      <strong style={{ color: 'var(--text)' }}>At-risk before:</strong>{' '}
+                      {feedback.before.atRiskCount} (dari {feedback.before.totalScored} total)
+                    </p>
+                    <p>
+                      <strong style={{ color: 'var(--text)' }}>At-risk sekarang:</strong>{' '}
+                      {feedback.after.atRiskCount} (dari {feedback.after.totalScored} total)
+                    </p>
+                    <p>
+                      <strong style={{ color: 'var(--text)' }}>Snapshot diambil:</strong>{' '}
+                      {new Date(feedback.runCreatedAt).toLocaleString('id-ID')}
+                    </p>
+                  </div>
+                </div>
+                {/* Progress bar */}
+                {feedback.totalTracked > 0 && (
+                  <div className="flex flex-col gap-1.5">
+                    <div className="flex justify-between text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                      <span>Re-engaged</span>
+                      <span>{Math.round(feedback.reEngaged / feedback.totalTracked * 100)}%</span>
+                    </div>
+                    <div className="h-2 rounded-full overflow-hidden" style={{ background: 'var(--border)' }}>
+                      <div
+                        className="h-2 rounded-full transition-all"
+                        style={{
+                          width: `${feedback.reEngaged / feedback.totalTracked * 100}%`,
+                          background: 'var(--accent-pos)',
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Delta table */}
+              {feedback.deltas.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: 'var(--text-muted)' }}>
+                    Score Delta — Before vs Sekarang
+                  </p>
+                  <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--border)' }}>
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr style={{ background: 'var(--bg-card-2)', borderBottom: '1px solid var(--border)' }}>
+                          {['Contact', 'Before', 'Sekarang', 'Delta', 'Status'].map(h => (
+                            <th key={h} className="px-4 py-3 text-left font-medium" style={{ color: 'var(--text-muted)' }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {feedback.deltas.map((d, i) => (
+                          <tr
+                            key={d.email}
+                            style={{
+                              background: d.reEngaged
+                                ? 'rgba(26,107,90,0.05)'
+                                : i % 2 === 0 ? 'var(--bg-card)' : 'var(--bg-card-2)',
+                              borderBottom: '1px solid var(--border)',
+                            }}
+                          >
+                            <td className="px-4 py-3" style={{ color: 'var(--text)' }}>
+                              <p className="font-medium">{d.name ?? d.email}</p>
+                              {d.name && <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>{d.email}</p>}
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex flex-col gap-1">
+                                <RiskBadge risk={d.riskBefore} />
+                                <span className="text-[10px] font-mono" style={{ color: 'var(--text-muted)' }}>{d.scoreBefore}</span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex flex-col gap-1">
+                                <RiskBadge risk={d.riskAfter} />
+                                <span className="text-[10px] font-mono" style={{ color: 'var(--text-muted)' }}>{d.scoreAfter}</span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              <span
+                                className="text-xs font-mono font-semibold"
+                                style={{
+                                  color: d.delta < 0
+                                    ? 'var(--accent-pos)'
+                                    : d.delta > 0 ? 'var(--accent-neg)' : 'var(--text-muted)',
+                                }}
+                              >
+                                {d.delta > 0 ? '+' : ''}{d.delta}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3">
+                              {d.reEngaged ? (
+                                <span
+                                  className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                                  style={{ background: 'rgba(26,107,90,0.15)', color: 'var(--accent-pos)' }}
+                                >
+                                  Re-engaged ✓
+                                </span>
+                              ) : d.delta < 0 ? (
+                                <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>Membaik</span>
+                              ) : d.delta > 0 ? (
+                                <span className="text-[10px]" style={{ color: 'var(--accent-neg)' }}>Memburuk</span>
+                              ) : (
+                                <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>Sama</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              <button
+                onClick={() => { setFeedback(null); setFeedbackErr('') }}
+                className="text-xs self-start"
+                style={{ color: 'var(--text-muted)' }}
+              >
+                Tutup hasil ×
+              </button>
+            </div>
           )}
         </>
       )}

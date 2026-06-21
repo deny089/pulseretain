@@ -3,6 +3,7 @@ import { serverListCampaigns, serverGetCampaignRecipients, serverListLabels } fr
 import { scoreAll } from '@/lib/retention/churn'
 import { searchChunks } from '@/lib/rag/search'
 import { generateRetentionInsight } from '@/lib/retention/generate'
+import { saveAnalysisRun } from '@/lib/retention/runs'
 import type { CampaignRecipient } from '@/lib/mailtarget/types'
 
 const PAGE_SIZE = 200
@@ -84,12 +85,16 @@ export async function POST(req: NextRequest) {
       err => `Insight generation failed: ${err instanceof Error ? err.message : String(err)}`
     )
 
+    // 6. Persist snapshot for M5 feedback loop (best-effort — never fail the analysis)
+    const runId = await saveAnalysisRun(labelName, atRisk, totalScored).catch(() => null)
+
     return NextResponse.json({
       data: {
         atRisk,
         totalScored,
         insight,
         chunks,
+        runId,
         meta: {
           campaignsAnalyzed: campaigns.length,
           totalRecipients: allRecipients.length,

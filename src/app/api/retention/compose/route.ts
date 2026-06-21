@@ -6,6 +6,7 @@ import {
   serverUpdateContact,
 } from '@/lib/mailtarget/server'
 import { composeRetentionEmail } from '@/lib/retention/compose'
+import { updateRunCampaignId } from '@/lib/retention/runs'
 import type { ScoredContact } from '@/lib/retention/churn'
 
 const MAX_TAG = 100  // max contacts to tag in one request to avoid rate-limiting
@@ -19,6 +20,7 @@ export async function POST(req: NextRequest) {
       senderName,
       senderEmail,
       subjectOverride,
+      runId,
     }: {
       labelName: string
       atRisk: ScoredContact[]
@@ -26,6 +28,7 @@ export async function POST(req: NextRequest) {
       senderName: string
       senderEmail: string
       subjectOverride?: string
+      runId?: string
     } = await req.json()
 
     if (!labelName || !senderName || !senderEmail) {
@@ -79,6 +82,11 @@ export async function POST(req: NextRequest) {
 
     const campaignData = campaign as { id?: string; _id?: string }
     const campaignId = campaignData.id ?? campaignData._id ?? ''
+
+    // Link campaign back to the analysis snapshot (best-effort)
+    if (runId && campaignId) {
+      await updateRunCampaignId(runId, campaignId).catch(() => {})
+    }
 
     return NextResponse.json({
       data: {

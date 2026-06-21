@@ -33,6 +33,17 @@ export async function POST() {
     await sql`CREATE INDEX chunks_source_id_idx ON chunks (source_id)`
     await sql`CREATE INDEX chunks_embedding_idx ON chunks USING hnsw (embedding vector_cosine_ops)`
 
+    await sql`
+      CREATE TABLE IF NOT EXISTS analysis_runs (
+        id               TEXT PRIMARY KEY,
+        label_name       TEXT NOT NULL,
+        campaign_id      TEXT,
+        at_risk_snapshot JSONB NOT NULL,
+        total_scored     INTEGER NOT NULL,
+        created_at       TIMESTAMPTZ DEFAULT now()
+      )
+    `
+
     return NextResponse.json({ ok: true, message: 'Schema ready' })
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unknown error'
