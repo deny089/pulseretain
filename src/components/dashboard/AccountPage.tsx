@@ -21,13 +21,18 @@ export default function AccountPage() {
   const [profileErr, setProfileErr] = useState('')
 
   useEffect(() => {
-    Promise.all([getCompanyDetail(), getUserProfile()]).then(([c, p]) => {
-      if (c.error) setCompanyErr(c.error)
-      else setCompany(c.data as CompanyDetail)
-      if (p.error) setProfileErr(p.error)
-      else setProfile(p.data as UserProfile)
-      setLoading(false)
-    })
+    Promise.all([getCompanyDetail(), getUserProfile()])
+      .then(([c, p]) => {
+        if (c.error) setCompanyErr(c.error)
+        else setCompany(c.data as CompanyDetail)
+        if (p.error) setProfileErr(p.error)
+        else setProfile(p.data as UserProfile)
+      })
+      .catch(() => {
+        setCompanyErr('Failed to load company info.')
+        setProfileErr('Failed to load profile.')
+      })
+      .finally(() => setLoading(false))
   }, [])
 
   return (

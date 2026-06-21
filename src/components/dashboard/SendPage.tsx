@@ -108,23 +108,25 @@ export default function SendPage() {
       listCampaigns({ perPage: 50 }),
       listLabels({ perPage: 100 }),
       getAnalyticsSummary({ from: fmt(from), to: fmt(today) }),
-    ]).then(([s, c, l, sum]) => {
-      setSenders(Array.isArray(s.data) ? s.data : [])
-      const camps = Array.isArray(c.data) ? c.data : []
-      setCampaigns(camps)
-      setLabels(Array.isArray(l.data) ? l.data : [])
-      setSummary(sum.data ?? null)
+    ])
+      .then(([s, c, l, sum]) => {
+        setSenders(Array.isArray(s.data) ? s.data : [])
+        const camps = Array.isArray(c.data) ? c.data : []
+        setCampaigns(camps)
+        setLabels(Array.isArray(l.data) ? l.data : [])
+        setSummary(sum.data ?? null)
 
-      const feedItems: FeedItem[] = camps.slice(0, 20).map(camp => ({
-        id: camp.id,
-        type: 'campaign',
-        subject: camp.subject,
-        status: camp.stage ?? '',
-        ts: camp.lastUpdate ?? camp.updatedAt ?? camp.createdAt ?? '',
-        campaignId: camp.id,
-      }))
-      setFeed(feedItems)
-    })
+        const feedItems: FeedItem[] = camps.slice(0, 20).map(camp => ({
+          id: camp.id,
+          type: 'campaign',
+          subject: camp.subject,
+          status: camp.stage ?? '',
+          ts: camp.lastUpdate ?? camp.updatedAt ?? camp.createdAt ?? '',
+          campaignId: camp.id,
+        }))
+        setFeed(feedItems)
+      })
+      .catch(() => { /* API unavailable — leave state empty, UI already handles empty arrays */ })
   }, [])
 
   async function handleSendCampaign() {

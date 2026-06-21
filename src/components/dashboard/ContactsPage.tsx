@@ -73,11 +73,15 @@ export default function ContactsPage() {
 
   async function reload(q = '') {
     setLoading(true)
-    const params: Record<string, string | number | undefined> = { perPage: 50 }
-    if (q) params.search = q
-    const [c, l] = await Promise.all([listContacts(params), listLabels({ perPage: 100 })])
-    setAllContacts(Array.isArray(c.data) ? c.data : [])
-    setLabels(Array.isArray(l.data) ? l.data : [])
+    try {
+      const params: Record<string, string | number | undefined> = { perPage: 50 }
+      if (q) params.search = q
+      const [c, l] = await Promise.all([listContacts(params), listLabels({ perPage: 100 })])
+      setAllContacts(Array.isArray(c.data) ? c.data : [])
+      setLabels(Array.isArray(l.data) ? l.data : [])
+    } catch {
+      setAllContacts([]); setLabels([])
+    }
     setLoading(false)
   }
 

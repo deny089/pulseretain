@@ -84,14 +84,18 @@ export default function CampaignsPage() {
 
   async function reload() {
     setLoading(true)
-    const [c, s, l] = await Promise.all([
-      listCampaigns({ perPage: 50 }),
-      listSenders(),
-      listLabels({ perPage: 100 }),
-    ])
-    setCampaigns(Array.isArray(c.data) ? c.data : [])
-    setSenders(Array.isArray(s.data) ? s.data : [])
-    setLabels(Array.isArray(l.data) ? l.data : [])
+    try {
+      const [c, s, l] = await Promise.all([
+        listCampaigns({ perPage: 50 }),
+        listSenders(),
+        listLabels({ perPage: 100 }),
+      ])
+      setCampaigns(Array.isArray(c.data) ? c.data : [])
+      setSenders(Array.isArray(s.data) ? s.data : [])
+      setLabels(Array.isArray(l.data) ? l.data : [])
+    } catch {
+      setCampaigns([]); setSenders([]); setLabels([])
+    }
     setLoading(false)
   }
 
