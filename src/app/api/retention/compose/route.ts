@@ -83,9 +83,18 @@ export async function POST(req: NextRequest) {
     const campaignData = campaign as { id?: string; _id?: string }
     const campaignId = campaignData.id ?? campaignData._id ?? ''
 
-    // Link campaign back to the analysis snapshot (best-effort)
+    // Link campaign back to the analysis snapshot so the M5 feedback loop can
+    // correlate before/after scores. If this fails, the feedback check would
+    // silently compare against the wrong data — so surface it as a warning
+    // rather than swallowing it.
+    let warning: string | undefined
     if (runId && campaignId) {
-      await updateRunCampaignId(runId, campaignId).catch(() => {})
+      try {
+        await updateRunCampaignId(runId, campaignId)
+      } catch {
+        warning = 'Campaign created, but it could not be linked to the analysis snapshot. ' +
+          'The re-engagement check may not reflect this campaign.'
+      }
     }
 
     return NextResponse.json({
@@ -96,6 +105,7 @@ export async function POST(req: NextRequest) {
         contactsTagged,
         contactsSkipped,
         htmlPreview: email.htmlContent.slice(0, 300) + '…',
+        warning,
       },
     })
   } catch (err) {

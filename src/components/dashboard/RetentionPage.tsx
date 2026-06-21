@@ -74,6 +74,7 @@ type ComposeResult = {
   atRiskLabel: string
   contactsTagged: number
   contactsSkipped: number
+  warning?: string
 }
 
 type DeltaContact = {
@@ -95,6 +96,8 @@ type FeedbackResult = {
   after:  { totalScored: number; atRiskCount: number }
   reEngaged: number
   totalTracked: number
+  missing: number
+  truncated: boolean
   deltas: DeltaContact[]
 }
 
@@ -467,6 +470,14 @@ export default function RetentionPage() {
                       Campaign draft created
                     </p>
                   </div>
+                  {composeResult.warning && (
+                    <p
+                      className="text-xs px-3 py-2 rounded-lg"
+                      style={{ background: 'rgba(245,158,11,0.1)', color: '#b45309' }}
+                    >
+                      ⚠ {composeResult.warning}
+                    </p>
+                  )}
                   <div className="flex flex-col gap-1 text-xs" style={{ color: 'var(--text-muted)' }}>
                     <p><strong style={{ color: 'var(--text)' }}>Subject:</strong> {composeResult.subject}</p>
                     <p><strong style={{ color: 'var(--text)' }}>Label:</strong> {composeResult.atRiskLabel}</p>
@@ -684,6 +695,16 @@ export default function RetentionPage() {
                         }}
                       />
                     </div>
+                  </div>
+                )}
+                {(feedback.missing > 0 || feedback.truncated) && (
+                  <div className="flex flex-col gap-1 text-[11px]" style={{ color: '#b45309' }}>
+                    {feedback.missing > 0 && (
+                      <p>⚠ {feedback.missing} kontak dari snapshot tidak lagi ada (dihapus / unsubscribe / label dilepas) — dikecualikan dari perbandingan.</p>
+                    )}
+                    {feedback.truncated && (
+                      <p>⚠ Sebagian campaign punya &gt;2.000 penerima — data dibatasi, metrik mungkin tidak mencerminkan seluruh segmen.</p>
+                    )}
                   </div>
                 )}
               </div>

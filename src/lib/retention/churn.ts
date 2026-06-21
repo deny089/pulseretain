@@ -18,7 +18,6 @@ export type ScoredContact = ContactEngagement & {
 
 export function aggregateEngagement(
   rows: CampaignRecipient[],
-  campaignIds: string[],
 ): Map<string, ContactEngagement> {
   const map = new Map<string, ContactEngagement>()
 
@@ -26,9 +25,12 @@ export function aggregateEngagement(
     const key = r.email.toLowerCase()
     let entry = map.get(key)
     if (!entry) {
+      const fullName = r.firstname?.trim()
+        ? `${r.firstname} ${r.lastname ?? ''}`.trim()
+        : undefined
       entry = {
         email: r.email,
-        name: r.name ?? (r.firstname ? `${r.firstname} ${r.lastname ?? ''}`.trim() : undefined),
+        name: r.name?.trim() || fullName,
         contactId: r.contactId,
         totalCampaigns: 0,
         openedCampaigns: 0,
@@ -39,7 +41,9 @@ export function aggregateEngagement(
       map.set(key, entry)
     }
 
-    entry.totalCampaigns = campaignIds.length
+    // Each row = one (contact, campaign) pair. Count actual campaigns this
+    // contact appeared in — NOT the total campaigns analyzed.
+    entry.totalCampaigns += 1
     if ((r.visitCount ?? 0) > 0) entry.openedCampaigns += 1
     if (r.bouncedAt) entry.bounced = true
 
@@ -93,14 +97,14 @@ export type ScoreAllResult = {
 
 export function scoreAll(
   rows: CampaignRecipient[],
-  campaignIds: string[],
   labelName?: string,
 ): ScoreAllResult {
-  const filtered = labelName
-    ? rows.filter(r => r.labels?.some(l => l.toLowerCase() === labelName.toLowerCase()))
+  const target = labelName?.trim().toLowerCase()
+  const filtered = target
+    ? rows.filter(r => r.labels?.some(l => l.trim().toLowerCase() === target))
     : rows
 
-  const engagements = aggregateEngagement(filtered, campaignIds)
+  const engagements = aggregateEngagement(filtered)
   const all = Array.from(engagements.values()).map(scoreContact)
 
   return {

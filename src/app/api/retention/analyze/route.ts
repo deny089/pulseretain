@@ -67,13 +67,12 @@ export async function POST(req: NextRequest) {
       r.status === 'fulfilled' ? r.value : []
     )
 
-    const campaignIds = campaigns.map(c => c.id)
     const truncated = recipientResults.some(
       r => r.status === 'fulfilled' && r.value.length >= PAGE_SIZE * MAX_PAGES
     )
 
     // 3. Score contacts filtered by label — now returns { atRisk, totalScored }
-    const { atRisk, totalScored } = scoreAll(allRecipients, campaignIds, labelName)
+    const { atRisk, totalScored } = scoreAll(allRecipients, labelName)
 
     // 4. RAG similarity search
     const searchQuery = query?.trim()

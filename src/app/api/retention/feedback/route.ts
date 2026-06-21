@@ -58,14 +58,19 @@ export async function POST(req: NextRequest) {
     const allRecipients: CampaignRecipient[] = recipientResults.flatMap(r =>
       r.status === 'fulfilled' ? r.value : []
     )
-    const campaignIds = campaigns.map(c => c.id)
-
-    // 3. Build a FULL scored map for the label (including contacts that improved to low risk)
-    //    scoreAll() filters out low-risk, so we aggregate + score manually here.
-    const labelRecipients = allRecipients.filter(r =>
-      r.labels?.some(l => l.toLowerCase() === labelName.toLowerCase())
+    const truncated = recipientResults.some(
+      r => r.status === 'fulfilled' && r.value.length >= PAGE_SIZE * MAX_PAGES
     )
-    const engagements = aggregateEngagement(labelRecipients, campaignIds)
+
+    // 3. Build a FULL scored map for the label (including contacts that improved to low risk).
+    //    scoreAll() filters out low-risk, so we aggregate + score manually here.
+    //    Normalize label case the same way scoreAll does — labelName comes from the DB
+    //    snapshot and may differ in case/whitespace from the live recipient labels.
+    const target = labelName.trim().toLowerCase()
+    const labelRecipients = allRecipients.filter(r =>
+      r.labels?.some(l => l.trim().toLowerCase() === target)
+    )
+    const engagements = aggregateEngagement(labelRecipients)
     const fullAfterMap = new Map<string, ScoredContact>()
     for (const e of engagements.values()) {
       const scored = scoreContact(e)
@@ -115,6 +120,10 @@ export async function POST(req: NextRequest) {
         after:  { totalScored: totalScoredAfter,  atRiskCount: atRiskAfterCount },
         reEngaged,
         totalTracked: deltas.length,
+        // Contacts in the snapshot that are no longer present (deleted, unsubscribed,
+        // or label removed) — they can't be compared and are excluded from deltas.
+        missing: atRiskSnapshot.length - deltas.length,
+        truncated,
         deltas,
       },
     })

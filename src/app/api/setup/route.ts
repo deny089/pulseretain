@@ -18,20 +18,39 @@ export async function POST() {
       )
     `
 
-    // Recreate chunks to guarantee vector(768) — safe to drop since sources cascade
-    await sql`DROP TABLE IF EXISTS chunks`
-    await sql`
-      CREATE TABLE chunks (
-        id          TEXT PRIMARY KEY,
-        source_id   TEXT NOT NULL REFERENCES sources(id) ON DELETE CASCADE,
-        chunk_index INTEGER NOT NULL,
-        content     TEXT NOT NULL,
-        embedding   vector(768),
-        created_at  TIMESTAMPTZ DEFAULT now()
-      )
+    // Only (re)create chunks when it's missing or has the wrong vector dimension.
+    // Dropping unconditionally would destroy live embeddings if setup is re-run
+    // (or run concurrently). For pgvector, atttypmod holds the column dimension.
+    const dimRows = await sql`
+      SELECT a.atttypmod AS dim
+      FROM pg_attribute a
+      JOIN pg_class c ON c.oid = a.attrelid
+      WHERE c.relname = 'chunks'
+        AND a.attname = 'embedding'
+        AND a.attnum > 0
+        AND NOT a.attisdropped
     `
-    await sql`CREATE INDEX chunks_source_id_idx ON chunks (source_id)`
-    await sql`CREATE INDEX chunks_embedding_idx ON chunks USING hnsw (embedding vector_cosine_ops)`
+    const currentDim = (dimRows[0]?.dim as number | undefined) ?? null
+    const chunksReady = currentDim === 768
+
+    if (!chunksReady) {
+      await sql`DROP TABLE IF EXISTS chunks`
+      await sql`
+        CREATE TABLE chunks (
+          id          TEXT PRIMARY KEY,
+          source_id   TEXT NOT NULL REFERENCES sources(id) ON DELETE CASCADE,
+          chunk_index INTEGER NOT NULL,
+          content     TEXT NOT NULL,
+          embedding   vector(768),
+          created_at  TIMESTAMPTZ DEFAULT now()
+        )
+      `
+      await sql`CREATE INDEX chunks_source_id_idx ON chunks (source_id)`
+      await sql`CREATE INDEX chunks_embedding_idx ON chunks USING hnsw (embedding vector_cosine_ops)`
+    }
+
+    // Index for the UI status-polling query (cheap, idempotent).
+    await sql`CREATE INDEX IF NOT EXISTS sources_status_idx ON sources (status)`
 
     await sql`
       CREATE TABLE IF NOT EXISTS analysis_runs (
@@ -44,7 +63,12 @@ export async function POST() {
       )
     `
 
-    return NextResponse.json({ ok: true, message: 'Schema ready' })
+    return NextResponse.json({
+      ok: true,
+      message: chunksReady
+        ? 'Schema ready (existing chunks preserved)'
+        : 'Schema ready (chunks table created/rebuilt)',
+    })
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unknown error'
     return NextResponse.json({ ok: false, error: msg }, { status: 500 })
