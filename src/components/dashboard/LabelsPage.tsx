@@ -25,7 +25,7 @@ function Modal({ title, children, onClose }: { title: string; children: React.Re
   )
 }
 
-export default function LabelsPage() {
+export default function LabelsPage({ embedded = false }: { embedded?: boolean } = {}) {
   const [labels, setLabels]   = useState<Label[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -73,10 +73,12 @@ export default function LabelsPage() {
   }
 
   return (
-    <div className="p-6 flex flex-col gap-6 w-full">
+    <div className={embedded ? 'flex flex-col gap-6 w-full' : 'p-6 flex flex-col gap-6 w-full'}>
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold" style={{ color: 'var(--text)' }}>Labels</h1>
+          {!embedded && (
+            <h1 className="text-xl font-semibold" style={{ color: 'var(--text)' }}>Labels</h1>
+          )}
           <p className="text-sm mt-0.5" style={{ color: 'var(--text-muted)' }}>{labels.length} labels</p>
         </div>
         <button

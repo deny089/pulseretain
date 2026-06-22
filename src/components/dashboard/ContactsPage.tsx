@@ -5,6 +5,7 @@ import {
   listContacts, createContact, updateContact, deleteContact, listLabels,
 } from '@/lib/mailtarget/api'
 import type { Contact, Label, CreateContactPayload } from '@/lib/mailtarget/types'
+import LabelsPage from './LabelsPage'
 
 const PRESET_COLORS = ['#1a6b5a','#1d4ed8','#6d28d9','#d97706','#dc2626','#16a34a','#ea580c','#db2777','#64748b']
 function labelColor(name: string) {
@@ -55,7 +56,10 @@ type FormState = CreateContactPayload & { labelsArr?: string[] }
 
 const EMPTY_FORM: FormState = { email: '', firstname: '', lastname: '', phone: '', labels: [] }
 
+type Tab = 'contacts' | 'labels'
+
 export default function ContactsPage() {
+  const [tab, setTab]                 = useState<Tab>('contacts')
   const [allContacts, setAllContacts] = useState<Contact[]>([])
   const [labels, setLabels]           = useState<Label[]>([])
   const [loading, setLoading]         = useState(true)
@@ -136,99 +140,127 @@ export default function ContactsPage() {
     ? allContacts.filter(c => (c.labels ?? []).some(l => l.toLowerCase() === filterLabel.toLowerCase()))
     : allContacts
 
+  const TABS: { key: Tab; label: string }[] = [
+    { key: 'contacts', label: 'Contacts' },
+    { key: 'labels',   label: 'Labels' },
+  ]
+
   return (
     <div className="p-6 flex flex-col gap-6 w-full">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold" style={{ color: 'var(--text)' }}>Contacts</h1>
-          <p className="text-sm mt-0.5" style={{ color: 'var(--text-muted)' }}>{allContacts.length} contacts</p>
-        </div>
-        <button
-          onClick={openCreate}
-          className="px-4 py-2 rounded-lg text-xs font-medium"
-          style={{ background: 'var(--accent-pos)', color: '#fff' }}
-        >
-          + New Contact
-        </button>
+      {/* Tab bar — Labels lives inside Contacts, not in the sidebar */}
+      <div className="flex items-center gap-1 border-b" style={{ borderColor: 'var(--border)' }}>
+        {TABS.map(t => {
+          const active = tab === t.key
+          return (
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              className="px-4 py-2.5 text-sm font-medium -mb-px transition-colors"
+              style={{
+                color: active ? 'var(--text)' : 'var(--text-muted)',
+                borderBottom: `2px solid ${active ? 'var(--accent-pos)' : 'transparent'}`,
+              }}
+            >
+              {t.label}
+            </button>
+          )
+        })}
       </div>
 
-      {/* Filters */}
-      <div className="flex gap-3 flex-wrap">
-        <input
-          type="text"
-          className="input-text"
-          style={{ minWidth: 200 }}
-          placeholder="Search contacts…"
-          value={search}
-          onChange={e => handleSearchChange(e.target.value)}
-        />
-        <select
-          className="input-select"
-          value={filterLabel}
-          onChange={e => setFilterLabel(e.target.value)}
-        >
-          <option value="">All Labels</option>
-          {labels.map(l => <option key={l.name} value={l.name}>{l.name}</option>)}
-        </select>
-      </div>
+      {tab === 'labels' ? (
+        <LabelsPage embedded />
+      ) : (
+        <>
+          <div className="flex items-center justify-between">
+            <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{allContacts.length} contacts</p>
+            <button
+              onClick={openCreate}
+              className="px-4 py-2 rounded-lg text-xs font-medium"
+              style={{ background: 'var(--accent-pos)', color: '#fff' }}
+            >
+              + New Contact
+            </button>
+          </div>
 
-      {/* Table */}
-      <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--border)' }}>
-        <table className="w-full text-xs">
-          <thead>
-            <tr style={{ background: 'var(--bg-card-2)', borderBottom: `1px solid var(--border)` }}>
-              {['Name', 'Email', 'Labels', 'State', 'Created', 'Actions'].map(h => (
-                <th key={h} className="px-4 py-3 text-left font-medium" style={{ color: 'var(--text-muted)' }}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr><td colSpan={6} className="px-4 py-8 text-center" style={{ color: 'var(--text-muted)' }}>Loading…</td></tr>
-            ) : displayed.length === 0 ? (
-              <tr><td colSpan={6} className="px-4 py-8 text-center" style={{ color: 'var(--text-muted)' }}>No contacts found.</td></tr>
-            ) : displayed.map((c, i) => (
-              <tr
-                key={c.id}
-                style={{
-                  background: i % 2 === 0 ? 'var(--bg-card)' : 'var(--bg-card-2)',
-                  borderBottom: `1px solid var(--border)`,
-                }}
-              >
-                <td className="px-4 py-3 font-medium" style={{ color: 'var(--text)' }}>{contactDisplayName(c)}</td>
-                <td className="px-4 py-3" style={{ color: 'var(--text-sub)' }}>{c.email}</td>
-                <td className="px-4 py-3">
-                  <div className="flex flex-wrap gap-1">
-                    {(c.labels ?? []).map(l => (
-                      <span
-                        key={l}
-                        className="badge"
-                        style={{
-                          background: labelColor(l) + '22',
-                          color: labelColor(l),
-                          border: `1px solid ${labelColor(l)}44`,
-                        }}
-                      >
-                        {l}
-                      </span>
-                    ))}
-                  </div>
-                </td>
-                <td className="px-4 py-3"><StateBadge state={c.state} /></td>
-                <td className="px-4 py-3" style={{ color: 'var(--text-muted)' }}>
-                  {c.createdAt ? new Date(c.createdAt).toLocaleDateString() : '—'}
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex gap-3">
-                    <button onClick={() => openEdit(c)} style={{ color: 'var(--accent-blue)' }}>Edit</button>
-                    <button onClick={() => setDeleteTarget(c)} style={{ color: 'var(--accent-neg)' }}>Delete</button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+          {/* Filters */}
+          <div className="flex gap-3 flex-wrap">
+            <input
+              type="text"
+              className="input-text"
+              style={{ minWidth: 200 }}
+              placeholder="Search contacts…"
+              value={search}
+              onChange={e => handleSearchChange(e.target.value)}
+            />
+            <select
+              className="input-select"
+              value={filterLabel}
+              onChange={e => setFilterLabel(e.target.value)}
+            >
+              <option value="">All Labels</option>
+              {labels.map(l => <option key={l.name} value={l.name}>{l.name}</option>)}
+            </select>
+          </div>
+
+          {/* Table */}
+          <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--border)' }}>
+            <table className="w-full text-xs">
+              <thead>
+                <tr style={{ background: 'var(--bg-card-2)', borderBottom: `1px solid var(--border)` }}>
+                  {['Name', 'Email', 'Labels', 'State', 'Created', 'Actions'].map(h => (
+                    <th key={h} className="px-4 py-3 text-left font-medium" style={{ color: 'var(--text-muted)' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr><td colSpan={6} className="px-4 py-8 text-center" style={{ color: 'var(--text-muted)' }}>Loading…</td></tr>
+                ) : displayed.length === 0 ? (
+                  <tr><td colSpan={6} className="px-4 py-8 text-center" style={{ color: 'var(--text-muted)' }}>No contacts found.</td></tr>
+                ) : displayed.map((c, i) => (
+                  <tr
+                    key={c.id}
+                    style={{
+                      background: i % 2 === 0 ? 'var(--bg-card)' : 'var(--bg-card-2)',
+                      borderBottom: `1px solid var(--border)`,
+                    }}
+                  >
+                    <td className="px-4 py-3 font-medium" style={{ color: 'var(--text)' }}>{contactDisplayName(c)}</td>
+                    <td className="px-4 py-3" style={{ color: 'var(--text-sub)' }}>{c.email}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex flex-wrap gap-1">
+                        {(c.labels ?? []).map(l => (
+                          <span
+                            key={l}
+                            className="badge"
+                            style={{
+                              background: labelColor(l) + '22',
+                              color: labelColor(l),
+                              border: `1px solid ${labelColor(l)}44`,
+                            }}
+                          >
+                            {l}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3"><StateBadge state={c.state} /></td>
+                    <td className="px-4 py-3" style={{ color: 'var(--text-muted)' }}>
+                      {c.createdAt ? new Date(c.createdAt).toLocaleDateString() : '—'}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex gap-3">
+                        <button onClick={() => openEdit(c)} style={{ color: 'var(--accent-blue)' }}>Edit</button>
+                        <button onClick={() => setDeleteTarget(c)} style={{ color: 'var(--accent-neg)' }}>Delete</button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
 
       {/* Create/Edit Modal */}
       {showForm && (

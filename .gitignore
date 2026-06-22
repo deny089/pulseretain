@@ -32,6 +32,15 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
+
+# local development config (Claude Code, IDE, etc)
+.claude/
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sublime-workspace
 
 # vercel
 .vercel

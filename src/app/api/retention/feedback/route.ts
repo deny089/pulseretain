@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { serverListCampaigns, serverGetCampaignRecipients } from '@/lib/mailtarget/server'
 import { aggregateEngagement, scoreContact } from '@/lib/retention/churn'
-import { getAnalysisRun } from '@/lib/retention/runs'
+import { getAnalysisRun, saveFeedbackResult } from '@/lib/retention/runs'
 import type { CampaignRecipient } from '@/lib/mailtarget/types'
 import type { ScoredContact } from '@/lib/retention/churn'
 
@@ -124,6 +124,17 @@ export async function POST(req: NextRequest) {
       if (a.reEngaged !== b.reEngaged) return a.reEngaged ? -1 : 1
       return a.delta - b.delta
     })
+
+    // Persist summary so the History page can surface re-engagement rate without
+    // re-running the full feedback computation (best-effort — never fail the response)
+    await saveFeedbackResult(runId, {
+      reEngaged,
+      totalTracked: deltas.length,
+      atRiskBefore: atRiskSnapshot.length,
+      atRiskAfter: atRiskAfterCount,
+      totalScored: totalScoredAfter,
+      missing: atRiskSnapshot.length - deltas.length,
+    }).catch(() => null)
 
     return NextResponse.json({
       data: {

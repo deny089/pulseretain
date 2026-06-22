@@ -63,6 +63,10 @@ export async function POST() {
       )
     `
 
+    // M6: feedback columns — idempotent, safe to re-run on existing data
+    await sql`ALTER TABLE analysis_runs ADD COLUMN IF NOT EXISTS feedback_result   JSONB`
+    await sql`ALTER TABLE analysis_runs ADD COLUMN IF NOT EXISTS last_feedback_at  TIMESTAMPTZ`
+
     return NextResponse.json({
       ok: true,
       message: chunksReady
