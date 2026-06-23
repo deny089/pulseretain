@@ -9,6 +9,7 @@ import {
   deleteCampaign,
   sendCampaign,
   sendTestCampaign,
+  getCampaign,
   getCampaignAnalytics,
   getCampaignRecipients,
 } from '@/lib/mailtarget/api'
@@ -72,6 +73,8 @@ export default function CampaignsPage() {
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [creating, setCreating]   = useState(false)
   const [createErr, setCreateErr] = useState('')
+
+  const [previewTarget, setPreviewTarget] = useState<{ campaign: Campaign; html: string | null } | null>(null)
 
   const [analyticsModal, setAnalyticsModal] = useState<{ campaign: Campaign; data: CampaignAnalytics | null } | null>(null)
   const [recipientsModal, setRecipientsModal] = useState<{
@@ -150,6 +153,12 @@ export default function CampaignsPage() {
     if (!testTarget || !testEmail) return
     const { error } = await sendTestCampaign(testTarget.id, { recipient: testEmail })
     setTestMsg(error ? `Error: ${error}` : `Test sent to ${testEmail}.`)
+  }
+
+  async function openPreview(c: Campaign) {
+    setPreviewTarget({ campaign: c, html: null })
+    const { data } = await getCampaign(c.id)
+    setPreviewTarget({ campaign: c, html: data?.htmlContent ?? '' })
   }
 
   async function openAnalytics(c: Campaign) {
@@ -252,6 +261,7 @@ export default function CampaignsPage() {
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-3">
+                    <button onClick={() => openPreview(c)} style={{ color: 'var(--accent-blue)' }}>Preview</button>
                     <button onClick={() => openAnalytics(c)} style={{ color: 'var(--accent-blue)' }}>Analytics</button>
                     <button onClick={() => openRecipients(c)} style={{ color: 'var(--accent-blue)' }}>Recipients</button>
                     {(c.stage ?? '').toUpperCase() === 'DRAFT' && (
@@ -268,6 +278,59 @@ export default function CampaignsPage() {
           </tbody>
         </table>
       </div>
+
+      {/* Preview Modal */}
+      {previewTarget && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: 'rgba(15,23,42,0.4)' }}
+          onClick={() => setPreviewTarget(null)}
+        >
+          <div
+            className="w-full flex flex-col gap-3 rounded-xl border"
+            style={{ maxWidth: 720, background: 'var(--bg-card)', borderColor: 'var(--border)', maxHeight: '90vh' }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* header */}
+            <div className="flex items-start justify-between px-5 pt-5 pb-0">
+              <div className="flex flex-col gap-0.5 min-w-0">
+                <p className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: 'var(--accent-pos)' }}>Email Preview</p>
+                <h3 className="text-sm font-semibold truncate" style={{ color: 'var(--text)' }}>{previewTarget.campaign.subject}</h3>
+                <div className="flex items-center gap-3 mt-1 text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                  {previewTarget.campaign.sender?.name && <span>From: <strong>{previewTarget.campaign.sender.name}</strong></span>}
+                  {previewTarget.campaign.recipients?.labels?.length ? (
+                    <span>To: {previewTarget.campaign.recipients.labels.join(', ')}</span>
+                  ) : null}
+                  <StageBadge stage={previewTarget.campaign.stage} />
+                </div>
+              </div>
+              <button onClick={() => setPreviewTarget(null)} className="ml-4 text-lg leading-none flex-shrink-0" style={{ color: 'var(--text-muted)' }}>×</button>
+            </div>
+            {/* divider */}
+            <div style={{ borderTop: '1px solid var(--border)', margin: '0 20px' }} />
+            {/* iframe */}
+            <div className="px-5 pb-5 overflow-auto" style={{ flex: 1 }}>
+              {previewTarget.html === null ? (
+                <div className="flex items-center justify-center" style={{ height: 480 }}>
+                  <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Loading preview…</p>
+                </div>
+              ) : previewTarget.html === '' ? (
+                <div className="flex items-center justify-center rounded-lg border" style={{ height: 480, borderColor: 'var(--border)' }}>
+                  <p className="text-xs" style={{ color: 'var(--text-muted)' }}>No HTML content available.</p>
+                </div>
+              ) : (
+                <iframe
+                  srcDoc={previewTarget.html}
+                  sandbox="allow-same-origin"
+                  title="Email Preview"
+                  className="w-full rounded-lg border"
+                  style={{ height: 520, borderColor: 'var(--border)', background: '#fff' }}
+                />
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Create Modal */}
       {showCreate && (
